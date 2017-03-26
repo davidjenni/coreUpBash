@@ -1,0 +1,19 @@
+{
+  "CN": "local CA",
+  "hosts": [
+    "mydomain.com"
+    ],
+  "key": {
+    "algo": "rsa",
+    "size": 4096
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Redmond",
+      "ST": "WA",
+      "O": "mydomain.com",
+      "OU": "local Certificate Authority"
+    }
+  ]
+}
