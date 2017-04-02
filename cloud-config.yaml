@@ -29,7 +29,7 @@ coreos:
       runtime: true
       content: |
         [Socket]
-        ListenStream=4460
+        ListenStream={{SSH_PORT}}
         FreeBind=true
         Accept=yes
 
@@ -43,7 +43,7 @@ write_files:
       ChallengeResponseAuthentication no
       PasswordAuthentication no
       PermitRootLogin no
-      Port 4460
+      Port {{SSH_PORT}}
       Subsystem sftp internal-sftp
       UseDNS no
       UsePrivilegeSeparation sandbox
@@ -52,23 +52,24 @@ write_files:
     permissions: 0644
     owner: 'root:root'
     content: |
-      # public ip (eth0): only allow http, https, docker/TLS (2376) and ssh (4460)
-      # private ip (eth1): only allow etcd client and peer (2379,2380)
       *filter
       :INPUT DROP [0:0]
       :FORWARD DROP [0:0]
       :OUTPUT ACCEPT [0:0]
       -A INPUT -i lo -j ACCEPT
       -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+      # public ip (eth0): only allow ping, http, https, docker/TLS (2376) and ssh (4460)
       -A INPUT -p tcp -m tcp --dport 2376 -j ACCEPT
-      -A INPUT -i eth1 -p tcp -m tcp --dport 2379 -j ACCEPT
-      -A INPUT -i eth1 -p tcp -m tcp --dport 2380 -j ACCEPT
-      -A INPUT -p tcp -m tcp --dport 4460 -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport {{SSH_PORT}} -j ACCEPT
       -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
       -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
       -A INPUT -p icmp -m limit --limit 300/min -j ACCEPT
-      -I INPUT -p tcp --dport 4460 -i eth0 -m state --state NEW -m recent --set
-      -I INPUT -p tcp --dport 4460 -i eth0 -m state --state NEW -m recent  --update --seconds 600 --hitcount 30 -j DROP
+      -I INPUT -p tcp --dport {{SSH_PORT}} -i eth0 -m state --state NEW -m recent --set
+      -I INPUT -p tcp --dport {{SSH_PORT}} -i eth0 -m state --state NEW -m recent  --update --seconds 600 --hitcount 30 -j DROP
+      # private ip (eth1): only allow etcd client and peer (2379,2380) and docker swarm (2377)
+      -A INPUT -i eth1 -p tcp -m tcp --dport 2377 -j ACCEPT
+      -A INPUT -i eth1 -p tcp -m tcp --dport 2379 -j ACCEPT
+      -A INPUT -i eth1 -p tcp -m tcp --dport 2380 -j ACCEPT
       -A INPUT -i docker0 -j ACCEPT
       COMMIT
   - path: /var/lib/ip6tables/rules-save
@@ -81,12 +82,12 @@ write_files:
       :OUTPUT ACCEPT [0:0]
       -A INPUT -i lo -j ACCEPT
       -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-      -A INPUT -p tcp -m tcp --dport 4460 -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport {{SSH_PORT}} -j ACCEPT
       -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
       -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
       -A INPUT -p ipv6-icmp -m limit --limit 300/min -j ACCEPT
-      -I INPUT -p tcp --dport 4460 -i eth0 -m state --state NEW -m recent --set
-      -I INPUT -p tcp --dport 4460 -i eth0 -m state --state NEW -m recent  --update --seconds 60 --hitcount 4 -j DROP
+      -I INPUT -p tcp --dport {{SSH_PORT}} -i eth0 -m state --state NEW -m recent --set
+      -I INPUT -p tcp --dport {{SSH_PORT}} -i eth0 -m state --state NEW -m recent  --update --seconds 60 --hitcount 4 -j DROP
       COMMIT
 
       # EOF
