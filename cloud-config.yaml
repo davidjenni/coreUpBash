@@ -1,0 +1,92 @@
+#cloud-config
+
+# see also: https://coreos.com/os/docs/latest/cloud-config.html
+coreos:
+  update:
+    reboot-strategy: "reboot"
+  # etcd2:
+  #   # generate a new token for each unique cluster from:
+  #   # curl "https://discovery.etcd.io/new?size=1"
+  #   discovery: {{ETCD_DISCOVERY_URL}}
+  #   # multi-region deployments, multi-cloud deployments, and Droplets without
+  #   # private networking need to use $public_ipv4:
+  #   advertise-client-urls: http://$private_ipv4:2379,http://$private_ipv4:4001
+  #   initial-advertise-peer-urls: http://$private_ipv4:2380
+  #   # listen on the official ports 2379, 2380 and one legacy port 4001:
+  #   listen-client-urls: http://0.0.0.0:2379
+  #   listen-peer-urls: http://$private_ipv4:2380
+  units:
+    # - name: etcd2.service
+    #   command: start
+    - name: iptables-restore.service
+      enable: true
+      command: start
+    - name: ip6tables-restore.service
+      enable: true
+      command: start
+    - name: sshd.socket
+      command: restart
+      runtime: true
+      content: |
+        [Socket]
+        ListenStream=4460
+        FreeBind=true
+        Accept=yes
+
+write_files:
+  - path: /etc/ssh/sshd_config
+    permissions: 0600
+    owner: root:root
+    content: |
+      # Use most defaults for sshd configuration.
+      AllowUsers core
+      ChallengeResponseAuthentication no
+      PasswordAuthentication no
+      PermitRootLogin no
+      Port 4460
+      Subsystem sftp internal-sftp
+      UseDNS no
+      UsePrivilegeSeparation sandbox
+
+  - path: /var/lib/iptables/rules-save
+    permissions: 0644
+    owner: 'root:root'
+    content: |
+      # public ip (eth0): only allow http, https, docker/TLS (2376) and ssh (4460)
+      # private ip (eth1): only allow etcd client and peer (2379,2380)
+      *filter
+      :INPUT DROP [0:0]
+      :FORWARD DROP [0:0]
+      :OUTPUT ACCEPT [0:0]
+      -A INPUT -i lo -j ACCEPT
+      -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 2376 -j ACCEPT
+      -A INPUT -i eth1 -p tcp -m tcp --dport 2379 -j ACCEPT
+      -A INPUT -i eth1 -p tcp -m tcp --dport 2380 -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 4460 -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
+      -A INPUT -p icmp -m limit --limit 300/min -j ACCEPT
+      -I INPUT -p tcp --dport 4460 -i eth0 -m state --state NEW -m recent --set
+      -I INPUT -p tcp --dport 4460 -i eth0 -m state --state NEW -m recent  --update --seconds 600 --hitcount 30 -j DROP
+      -A INPUT -i docker0 -j ACCEPT
+      COMMIT
+  - path: /var/lib/ip6tables/rules-save
+    permissions: 0644
+    owner: 'root:root'
+    content: |
+      *filter
+      :INPUT DROP [0:0]
+      :FORWARD DROP [0:0]
+      :OUTPUT ACCEPT [0:0]
+      -A INPUT -i lo -j ACCEPT
+      -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 4460 -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
+      -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
+      -A INPUT -p ipv6-icmp -m limit --limit 300/min -j ACCEPT
+      -I INPUT -p tcp --dport 4460 -i eth0 -m state --state NEW -m recent --set
+      -I INPUT -p tcp --dport 4460 -i eth0 -m state --state NEW -m recent  --update --seconds 60 --hitcount 4 -j DROP
+      COMMIT
+
+      # EOF

@@ -11,18 +11,29 @@ if [ -n "${DIGITALOCEAN_SSH_KEY_PATH}" ]; then
     echo "Found ssh private cert file: ${DIGITALOCEAN_SSH_KEY_PATH}"
     echo "with fingerprint: ${DIGITALOCEAN_SSH_KEY_FINGERPRINT}"
     _ssh_details="--digitalocean-ssh-key-path ${DIGITALOCEAN_SSH_KEY_PATH} --digitalocean-ssh-key-fingerprint ${DIGITALOCEAN_SSH_KEY_FINGERPRINT}"
-    # _ssh_details=" --digitalocean-ssh-key-fingerprint ${DIGITALOCEAN_SSH_KEY_FINGERPRINT}"
 else
     echo "Letting docker-machine generate SSH credentials."
     _ssh_details=
 fi
 
+# prepare cloud config:
+_CLOUD_CONFIG=${CLOUD_CONFIG:="cloud-config.yaml"}
+_CLOUD_CONFIG_GEN=$(basename -s .yaml ${_CLOUD_CONFIG}).gen.yaml
+
+# sed \
+#     -e "s|{{DO_SSH_PUB_KEY}}|${_DO_SSH_PUB_KEY_CONTENT}|g" \
+#     -e "s|{{ETCD_DISCOVERY_URL}}|${_ETCD_DISCOVERY}|g" \
+#       ${_CLOUD_CONFIG} \
+#     > ${_CLOUD_CONFIG_GEN}
+
 docker-machine create --driver digitalocean \
-    --digitalocean-image coreos-stable \
+    --digitalocean-image coreos-alpha \
     --digitalocean-region ${DO_REGION} \
     --digitalocean-size ${DO_SIZE} \
     --digitalocean-ipv6 \
     --digitalocean-private-networking \
     --digitalocean-ssh-user core \
+    --digitalocean-ssh-port 4460 \
     ${_ssh_details} \
+    --digitalocean-userdata ${_CLOUD_CONFIG} \
     $DO_NODE_BASENAME
